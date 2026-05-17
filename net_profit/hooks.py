@@ -11,5 +11,9 @@ required_apps = ["erpnext"]
 # app_include_css = "/assets/net_profit/css/net_profit.css"
 # app_include_js = "/assets/net_profit/js/net_profit.js"
 
+doctype_js = {
+	"Sales Invoice": "public/js/sales_invoice.js",
+}
+
 # Installation
 before_install = "net_profit.install.before_install"
