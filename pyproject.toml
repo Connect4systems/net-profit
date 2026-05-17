@@ -1,0 +1,23 @@
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "net_profit"
+authors = [
+    { name = "Net Profit", email = "admin@example.com" }
+]
+description = "Net Profit app for Frappe and ERPNext"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "packaging>=23.0"
+]
+
+[project.urls]
+Homepage = "https://example.com/net-profit"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0,<16.0.0"
+erpnext = ">=15.0.0,<16.0.0"

@@ -1,0 +1,7 @@
+recursive-include net_profit *.json
+recursive-include net_profit *.md
+recursive-include net_profit *.py
+recursive-include net_profit *.txt
+recursive-include net_profit/public *
+recursive-include net_profit/templates *
+recursive-include net_profit/www *
