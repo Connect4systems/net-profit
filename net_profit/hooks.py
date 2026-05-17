@@ -15,6 +15,10 @@ doctype_js = {
 	"Sales Invoice": "public/js/sales_invoice.js",
 }
 
+override_doctype_dashboards = {
+	"Sales Invoice": "net_profit.sales_invoice_dashboard.get_data",
+}
+
 # Installation
 before_install = "net_profit.install.before_install"
 after_install = "net_profit.install.create_custom_fields"

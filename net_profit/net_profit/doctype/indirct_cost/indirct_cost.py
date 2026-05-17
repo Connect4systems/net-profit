@@ -28,6 +28,8 @@ class IndirctCost(Document):
 			return
 
 		journal_entry = frappe.get_doc("Journal Entry", self.journal_entry)
+		self.clear_journal_entry_references(journal_entry.name)
+
 		if journal_entry.docstatus == 1:
 			journal_entry.cancel()
 
@@ -56,8 +58,7 @@ class IndirctCost(Document):
 		journal_entry.company = company
 		journal_entry.posting_date = self.date
 		journal_entry.user_remark = _("Indirct Cost for invoice {0}").format(self.sales_invoice)
-		if self.sales_invoice and frappe.get_meta("Journal Entry").has_field("net_profit_sales_invoice"):
-			journal_entry.net_profit_sales_invoice = self.sales_invoice
+		self.set_journal_entry_sales_invoice_reference(journal_entry)
 
 		for row in self.expinses:
 			journal_entry.append(
@@ -83,6 +84,20 @@ class IndirctCost(Document):
 		journal_entry.submit()
 
 		return journal_entry
+
+	def set_journal_entry_sales_invoice_reference(self, journal_entry):
+		if self.sales_invoice and frappe.get_meta("Journal Entry").has_field("net_profit_sales_invoice"):
+			journal_entry.net_profit_sales_invoice = self.sales_invoice
+
+	def clear_journal_entry_references(self, journal_entry):
+		if frappe.get_meta("Journal Entry").has_field("net_profit_sales_invoice"):
+			frappe.db.set_value(
+				"Journal Entry",
+				journal_entry,
+				"net_profit_sales_invoice",
+				None,
+				update_modified=False,
+			)
 
 	def get_company(self):
 		if self.sales_invoice:
