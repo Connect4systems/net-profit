@@ -18,7 +18,9 @@ def get_gross_profit_result(filters):
 	from erpnext.accounts.report.gross_profit.gross_profit import execute as gross_profit_execute
 
 	gross_profit_filters = frappe._dict(filters)
-	gross_profit_filters.based_on = gross_profit_filters.get("based_on") or "Invoice"
+	gross_profit_filters.group_by = (
+		gross_profit_filters.get("group_by") or gross_profit_filters.get("based_on") or "Invoice"
+	)
 
 	return gross_profit_execute(gross_profit_filters)
 
@@ -37,6 +39,11 @@ def get_columns(gross_profit_columns):
 def get_column_fieldname(column):
 	if isinstance(column, dict):
 		return column.get("fieldname")
+
+	if isinstance(column, str) and ":" in column:
+		parts = column.split(":")
+		if len(parts) > 1:
+			return parts[1]
 
 	return None
 

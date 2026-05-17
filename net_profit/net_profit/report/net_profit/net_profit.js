@@ -44,8 +44,8 @@ frappe.query_reports["Net Profit"] = {
 			},
 		},
 		{
-			fieldname: "based_on",
-			label: __("Based On"),
+			fieldname: "group_by",
+			label: __("Group By"),
 			fieldtype: "Select",
 			options: ["Invoice", "Item Code", "Item Group", "Customer", "Customer Group", "Territory", "Sales Person", "Project"],
 			default: "Invoice",
