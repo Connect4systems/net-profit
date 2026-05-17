@@ -13,6 +13,7 @@
   "section_break_gvlo",
   "expinses",
   "section_break_4ozk",
+  "journal_entry",
   "amended_from",
   "naming_series"
  ],
@@ -52,6 +53,13 @@
   {
    "fieldname": "section_break_4ozk",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1
   },
   {
    "fieldname": "amended_from",
