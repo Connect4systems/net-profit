@@ -43,5 +43,48 @@ frappe.query_reports["Net Profit"] = {
 				};
 			},
 		},
+		{
+			fieldname: "based_on",
+			label: __("Based On"),
+			fieldtype: "Select",
+			options: ["Invoice", "Item Code", "Item Group", "Customer", "Customer Group", "Territory", "Sales Person", "Project"],
+			default: "Invoice",
+		},
+		{
+			fieldname: "item_group",
+			label: __("Item Group"),
+			fieldtype: "Link",
+			options: "Item Group",
+		},
+		{
+			fieldname: "sales_person",
+			label: __("Sales Person"),
+			fieldtype: "Link",
+			options: "Sales Person",
+		},
+		{
+			fieldname: "warehouse",
+			label: __("Warehouse"),
+			fieldtype: "Link",
+			options: "Warehouse",
+		},
+		{
+			fieldname: "cost_center",
+			label: __("Cost Center"),
+			fieldtype: "Link",
+			options: "Cost Center",
+		},
+		{
+			fieldname: "project",
+			label: __("Project"),
+			fieldtype: "Link",
+			options: "Project",
+		},
+		{
+			fieldname: "include_returned_invoices",
+			label: __("Include Returned Invoices"),
+			fieldtype: "Check",
+			default: 1,
+		},
 	],
 };

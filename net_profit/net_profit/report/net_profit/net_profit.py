@@ -1,135 +1,209 @@
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	columns = get_columns()
-	data = get_data(filters)
+	gross_profit_result = get_gross_profit_result(filters)
+	columns = get_columns(gross_profit_result[0])
+	data = get_data(gross_profit_result[1])
 	report_summary = get_report_summary(data)
 	chart = get_chart(data)
 
 	return columns, data, None, chart, report_summary
 
 
-def get_columns():
+def get_gross_profit_result(filters):
+	from erpnext.accounts.report.gross_profit.gross_profit import execute as gross_profit_execute
+
+	gross_profit_filters = frappe._dict(filters)
+	gross_profit_filters.based_on = gross_profit_filters.get("based_on") or "Invoice"
+
+	return gross_profit_execute(gross_profit_filters)
+
+
+def get_columns(gross_profit_columns):
+	columns = list(gross_profit_columns)
+	existing_fieldnames = {get_column_fieldname(column) for column in columns}
+
+	for column in get_net_profit_columns():
+		if column["fieldname"] not in existing_fieldnames:
+			columns.append(column)
+
+	return columns
+
+
+def get_column_fieldname(column):
+	if isinstance(column, dict):
+		return column.get("fieldname")
+
+	return None
+
+
+def get_net_profit_columns():
 	return [
-		{
-			"label": _("Sales Invoice"),
-			"fieldname": "sales_invoice",
-			"fieldtype": "Link",
-			"options": "Sales Invoice",
-			"width": 160,
-		},
-		{"label": _("Posting Date"), "fieldname": "posting_date", "fieldtype": "Date", "width": 110},
-		{"label": _("Customer"), "fieldname": "customer", "fieldtype": "Link", "options": "Customer", "width": 180},
-		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
-		{"label": _("Net Sales"), "fieldname": "net_sales", "fieldtype": "Currency", "width": 130},
-		{"label": _("Grand Total"), "fieldname": "grand_total", "fieldtype": "Currency", "width": 130},
+		{"label": _("Direct Cost"), "fieldname": "direct_cost", "fieldtype": "Currency", "width": 130},
 		{"label": _("Indirect Cost"), "fieldname": "indirect_cost", "fieldtype": "Currency", "width": 130},
 		{"label": _("Net Profit"), "fieldname": "net_profit", "fieldtype": "Currency", "width": 130},
-		{"label": _("Profit %"), "fieldname": "profit_percent", "fieldtype": "Percent", "width": 100},
-		{
-			"label": _("Indirect Cost Count"),
-			"fieldname": "indirect_cost_count",
-			"fieldtype": "Int",
-			"width": 140,
-		},
+		{"label": _("Net Profit %"), "fieldname": "net_profit_percent", "fieldtype": "Percent", "width": 120},
 	]
 
 
-def get_data(filters):
-	conditions = ["si.docstatus = 1"]
-	values = {}
+def get_data(gross_profit_data):
+	data = [frappe._dict(row) for row in gross_profit_data]
+	indirect_cost_map = get_indirect_cost_map(get_sales_invoices(data))
+	invoice_sales_map = get_invoice_sales_map(data)
 
-	if filters.company:
-		conditions.append("si.company = %(company)s")
-		values["company"] = filters.company
+	current_invoice = None
+	for row in data:
+		invoice = get_row_sales_invoice(row, current_invoice)
+		if is_invoice_row(row, invoice):
+			current_invoice = invoice
 
-	if filters.from_date:
-		conditions.append("si.posting_date >= %(from_date)s")
-		values["from_date"] = filters.from_date
+		row.direct_cost = get_direct_cost(row)
+		row.indirect_cost = get_row_indirect_cost(row, invoice, indirect_cost_map, invoice_sales_map)
+		row.net_profit = flt(row.get("gross_profit")) - flt(row.indirect_cost)
+		row.net_profit_percent = (row.net_profit / get_sales_amount(row) * 100) if get_sales_amount(row) else 0
 
-	if filters.to_date:
-		conditions.append("si.posting_date <= %(to_date)s")
-		values["to_date"] = filters.to_date
+	return data
 
-	if filters.customer:
-		conditions.append("si.customer = %(customer)s")
-		values["customer"] = filters.customer
 
-	if filters.sales_invoice:
-		conditions.append("si.name = %(sales_invoice)s")
-		values["sales_invoice"] = filters.sales_invoice
+def get_sales_invoices(data):
+	invoices = set()
+	current_invoice = None
 
-	return frappe.db.sql(
-		f"""
+	for row in data:
+		invoice = get_row_sales_invoice(row, current_invoice)
+		if is_invoice_row(row, invoice):
+			current_invoice = invoice
+			invoices.add(invoice)
+		elif invoice:
+			invoices.add(invoice)
+
+	return list(invoices)
+
+
+def get_row_sales_invoice(row, current_invoice=None):
+	if row.get("sales_invoice"):
+		return row.sales_invoice
+
+	invoice_or_item = row.get("invoice_or_item")
+	if invoice_or_item and frappe.db.exists("Sales Invoice", invoice_or_item):
+		return invoice_or_item
+
+	return current_invoice
+
+
+def is_invoice_row(row, invoice):
+	return bool(invoice and row.get("invoice_or_item") == invoice and not cint(row.get("indent")))
+
+
+def get_indirect_cost_map(sales_invoices):
+	if not sales_invoices:
+		return {}
+
+	amounts = frappe.db.sql(
+		"""
 		SELECT
-			si.name AS sales_invoice,
-			si.posting_date,
-			si.customer,
-			si.customer_name,
-			si.base_net_total AS net_sales,
-			si.base_grand_total AS grand_total,
-			IFNULL(indirect_cost.amount, 0) AS indirect_cost,
-			(si.base_net_total - IFNULL(indirect_cost.amount, 0)) AS net_profit,
-			CASE
-				WHEN si.base_net_total = 0 THEN 0
-				ELSE ((si.base_net_total - IFNULL(indirect_cost.amount, 0)) / si.base_net_total) * 100
-			END AS profit_percent,
-			IFNULL(indirect_cost.cost_count, 0) AS indirect_cost_count
-		FROM `tabSales Invoice` si
-		LEFT JOIN (
-			SELECT
-				ic.sales_invoice,
-				SUM(ict.amount) AS amount,
-				COUNT(DISTINCT ic.name) AS cost_count
-			FROM `tabIndirct Cost` ic
-			INNER JOIN `tabindirect cost table` ict
-				ON ict.parent = ic.name
-				AND ict.parenttype = 'Indirct Cost'
-				AND ict.parentfield = 'expinses'
-			WHERE ic.docstatus = 1
-				AND IFNULL(ic.sales_invoice, '') != ''
-			GROUP BY ic.sales_invoice
-		) indirect_cost
-			ON indirect_cost.sales_invoice = si.name
-		WHERE {" AND ".join(conditions)}
-		ORDER BY si.posting_date DESC, si.name DESC
+			ic.sales_invoice,
+			SUM(ict.amount) AS amount
+		FROM `tabIndirct Cost` ic
+		INNER JOIN `tabindirect cost table` ict
+			ON ict.parent = ic.name
+			AND ict.parenttype = 'Indirct Cost'
+			AND ict.parentfield = 'expinses'
+		WHERE ic.docstatus = 1
+			AND ic.sales_invoice IN %(sales_invoices)s
+		GROUP BY ic.sales_invoice
 		""",
-		values,
+		{"sales_invoices": tuple(sales_invoices)},
 		as_dict=True,
 	)
 
+	return {row.sales_invoice: flt(row.amount) for row in amounts}
+
+
+def get_invoice_sales_map(data):
+	sales_map = {}
+	current_invoice = None
+
+	for row in data:
+		invoice = get_row_sales_invoice(row, current_invoice)
+		if is_invoice_row(row, invoice):
+			current_invoice = invoice
+			continue
+
+		if invoice:
+			sales_map[invoice] = sales_map.get(invoice, 0) + get_sales_amount(row)
+
+	return sales_map
+
+
+def get_direct_cost(row):
+	if row.get("buying_amount") is not None:
+		return flt(row.buying_amount)
+
+	return get_sales_amount(row) - flt(row.get("gross_profit"))
+
+
+def get_sales_amount(row):
+	for fieldname in ("base_amount", "selling_amount", "amount", "net_sales"):
+		if row.get(fieldname) is not None:
+			return flt(row.get(fieldname))
+
+	return 0
+
+
+def get_row_indirect_cost(row, invoice, indirect_cost_map, invoice_sales_map):
+	if not invoice:
+		return 0
+
+	indirect_cost = indirect_cost_map.get(invoice, 0)
+	if is_invoice_row(row, invoice):
+		return indirect_cost
+
+	invoice_sales = flt(invoice_sales_map.get(invoice))
+	if not invoice_sales:
+		return 0
+
+	return indirect_cost * get_sales_amount(row) / invoice_sales
+
 
 def get_report_summary(data):
-	net_sales = sum(flt(row.net_sales) for row in data)
-	grand_total = sum(flt(row.grand_total) for row in data)
-	indirect_cost = sum(flt(row.indirect_cost) for row in data)
-	net_profit = sum(flt(row.net_profit) for row in data)
+	summary_rows = [row for row in data if not cint(row.get("indent"))]
+	net_sales = sum(get_sales_amount(row) for row in summary_rows)
+	direct_cost = sum(flt(row.direct_cost) for row in summary_rows)
+	gross_profit = sum(flt(row.get("gross_profit")) for row in summary_rows)
+	indirect_cost = sum(flt(row.indirect_cost) for row in summary_rows)
+	net_profit = sum(flt(row.net_profit) for row in summary_rows)
 	profit_percent = (net_profit / net_sales * 100) if net_sales else 0
 
 	return [
 		{"value": net_sales, "label": _("Net Sales"), "datatype": "Currency"},
-		{"value": grand_total, "label": _("Grand Total"), "datatype": "Currency"},
+		{"value": direct_cost, "label": _("Direct Cost"), "datatype": "Currency"},
+		{"value": gross_profit, "label": _("Gross Profit"), "datatype": "Currency"},
 		{"value": indirect_cost, "label": _("Indirect Cost"), "datatype": "Currency"},
 		{"value": net_profit, "label": _("Net Profit"), "datatype": "Currency"},
-		{"value": profit_percent, "label": _("Profit %"), "datatype": "Percent"},
+		{"value": profit_percent, "label": _("Net Profit %"), "datatype": "Percent"},
 	]
 
 
 def get_chart(data):
+	summary_rows = [row for row in data if not cint(row.get("indent"))]
+
 	return {
 		"data": {
-			"labels": [_("Net Sales"), _("Indirect Cost"), _("Net Profit")],
+			"labels": [_("Net Sales"), _("Direct Cost"), _("Gross Profit"), _("Indirect Cost"), _("Net Profit")],
 			"datasets": [
 				{
 					"name": _("Amount"),
 					"values": [
-						sum(flt(row.net_sales) for row in data),
-						sum(flt(row.indirect_cost) for row in data),
-						sum(flt(row.net_profit) for row in data),
+						sum(get_sales_amount(row) for row in summary_rows),
+						sum(flt(row.direct_cost) for row in summary_rows),
+						sum(flt(row.get("gross_profit")) for row in summary_rows),
+						sum(flt(row.indirect_cost) for row in summary_rows),
+						sum(flt(row.net_profit) for row in summary_rows),
 					],
 				}
 			],
