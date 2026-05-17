@@ -4,7 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import flt, get_link_to_form
 
 
 class IndirctCost(Document):
@@ -17,6 +17,11 @@ class IndirctCost(Document):
 
 		journal_entry = self.create_journal_entry()
 		self.db_set("journal_entry", journal_entry.name, update_modified=False)
+		frappe.msgprint(
+			_("Journal Entry {0} created.").format(get_link_to_form("Journal Entry", journal_entry.name)),
+			alert=True,
+			indicator="green",
+		)
 
 	def on_cancel(self):
 		if not self.journal_entry:
@@ -25,6 +30,8 @@ class IndirctCost(Document):
 		journal_entry = frappe.get_doc("Journal Entry", self.journal_entry)
 		if journal_entry.docstatus == 1:
 			journal_entry.cancel()
+
+		self.db_set("journal_entry", None, update_modified=False)
 
 	def validate_expinses(self):
 		if not self.payment_account:
@@ -49,6 +56,8 @@ class IndirctCost(Document):
 		journal_entry.company = company
 		journal_entry.posting_date = self.date
 		journal_entry.user_remark = _("Indirct Cost for invoice {0}").format(self.sales_invoice)
+		if self.sales_invoice and frappe.get_meta("Journal Entry").has_field("net_profit_sales_invoice"):
+			journal_entry.net_profit_sales_invoice = self.sales_invoice
 
 		for row in self.expinses:
 			journal_entry.append(

@@ -3,6 +3,7 @@ from importlib.metadata import version
 from packaging.version import Version
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields as create_frappe_custom_fields
 
 
 def before_install():
@@ -21,3 +22,21 @@ def validate_major_version(package_name, expected_major):
             f"Net Profit requires {package_name} v{expected_major}. "
             f"Found {package_name} {package_version}."
         )
+
+
+def create_custom_fields():
+    custom_fields = {
+        "Journal Entry": [
+            {
+                "fieldname": "net_profit_sales_invoice",
+                "label": "Sales Invoice",
+                "fieldtype": "Link",
+                "options": "Sales Invoice",
+                "insert_after": "user_remark",
+                "read_only": 1,
+                "no_copy": 1,
+            }
+        ]
+    }
+
+    create_frappe_custom_fields(custom_fields, ignore_validate=True)

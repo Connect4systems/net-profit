@@ -17,3 +17,5 @@ doctype_js = {
 
 # Installation
 before_install = "net_profit.install.before_install"
+after_install = "net_profit.install.create_custom_fields"
+after_migrate = "net_profit.install.create_custom_fields"
